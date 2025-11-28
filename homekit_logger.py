@@ -413,11 +413,15 @@ DASHBOARD_HTML = """
         tr:hover { background: #f9f9f9; }
         .endpoint { background: #e8f5e9; padding: 10px; border-radius: 6px; font-family: monospace; margin: 10px 0; }
         .sensor-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
-        .sensor-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 12px; }
+        .sensor-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 12px; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; text-decoration: none; display: block; }
+        .sensor-card:hover { transform: translateY(-2px); box-shadow: 0 4px 20px rgba(102, 126, 234, 0.4); }
         .sensor-value { font-size: 2em; font-weight: bold; }
         .sensor-name { opacity: 0.9; font-size: 0.9em; }
+        .sensor-hint { opacity: 0.7; font-size: 0.75em; margin-top: 8px; }
         .refresh-btn { background: #007aff; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; }
         .refresh-btn:hover { background: #0056b3; }
+        .back-link { display: inline-block; margin-bottom: 15px; color: #007aff; text-decoration: none; }
+        .back-link:hover { text-decoration: underline; }
     </style>
 </head>
 <body>
@@ -426,6 +430,7 @@ DASHBOARD_HTML = """
     <div class="card">
         <h2>Current Readings</h2>
         <button class="refresh-btn" onclick="location.reload()">Refresh</button>
+        <p style="color: #666; font-size: 0.9em;">Click any sensor to view its history</p>
         <div class="sensor-grid" id="current-readings">
             Loading...
         </div>
@@ -436,6 +441,7 @@ DASHBOARD_HTML = """
         <div class="endpoint">POST /log - Submit new readings</div>
         <div class="endpoint">GET /readings - Get recent readings (JSON)</div>
         <div class="endpoint">GET /readings/csv - Export all data as CSV</div>
+        <div class="endpoint">GET /device/&lt;sensor_name&gt; - View device history</div>
     </div>
 
     <div class="card">
@@ -456,10 +462,11 @@ DASHBOARD_HTML = """
                     const sensors = Object.keys(latest).filter(k => k !== 'id' && k !== 'timestamp');
                     document.getElementById('current-readings').innerHTML = sensors.map(s => {
                         const val = latest[s];
-                        return `<div class="sensor-card">
+                        return `<a href="/device/${s}" class="sensor-card">
                             <div class="sensor-name">${s.replace(/_/g, ' ')}</div>
                             <div class="sensor-value">${val !== null ? val : '—'}</div>
-                        </div>`;
+                            <div class="sensor-hint">Click for history</div>
+                        </a>`;
                     }).join('');
                 }
 
@@ -480,11 +487,254 @@ DASHBOARD_HTML = """
 </html>
 """
 
+# Device history page
+DEVICE_HTML = """
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{{ sensor_name }} History - HomeKit Logger</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; background: #f5f5f7; }
+        h1 { color: #1d1d1f; }
+        .card { background: white; border-radius: 12px; padding: 20px; margin: 20px 0; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #e0e0e0; }
+        th { background: #f5f5f7; font-weight: 600; }
+        tr:hover { background: #f9f9f9; }
+        .back-link { display: inline-block; margin-bottom: 15px; color: #007aff; text-decoration: none; }
+        .back-link:hover { text-decoration: underline; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .stat-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px; border-radius: 8px; text-align: center; }
+        .stat-value { font-size: 1.5em; font-weight: bold; }
+        .stat-label { opacity: 0.9; font-size: 0.85em; }
+        .chart-container { height: 300px; margin: 20px 0; }
+        .time-filter { margin: 15px 0; }
+        .time-filter button { background: #e0e0e0; border: none; padding: 8px 16px; margin-right: 8px; border-radius: 6px; cursor: pointer; }
+        .time-filter button.active { background: #007aff; color: white; }
+        .time-filter button:hover { background: #c0c0c0; }
+        .time-filter button.active:hover { background: #0056b3; }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <a href="/" class="back-link">← Back to Dashboard</a>
+    <h1>{{ sensor_display_name }}</h1>
+
+    <div class="card">
+        <h2>Statistics</h2>
+        <div class="stats-grid" id="stats">
+            Loading...
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>History Chart</h2>
+        <div class="time-filter">
+            <button onclick="loadData(24)" id="btn-24">Last 24 Hours</button>
+            <button onclick="loadData(168)" id="btn-168">Last 7 Days</button>
+            <button onclick="loadData(720)" id="btn-720" class="active">Last 30 Days</button>
+            <button onclick="loadData(0)" id="btn-0">All Time</button>
+        </div>
+        <div class="chart-container">
+            <canvas id="historyChart"></canvas>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Recent Readings</h2>
+        <table id="readings-table">
+            <thead><tr><th>Timestamp</th><th>Value</th></tr></thead>
+            <tbody id="readings-body">Loading...</tbody>
+        </table>
+    </div>
+
+    <script>
+        const sensorName = '{{ sensor_name }}';
+        const unit = '{{ unit }}';
+        let chart = null;
+
+        function loadData(hours) {
+            // Update button states
+            document.querySelectorAll('.time-filter button').forEach(b => b.classList.remove('active'));
+            document.getElementById('btn-' + hours).classList.add('active');
+
+            const url = hours > 0
+                ? `/api/device/${sensorName}?hours=${hours}`
+                : `/api/device/${sensorName}`;
+
+            fetch(url)
+                .then(r => r.json())
+                .then(data => {
+                    updateStats(data.stats);
+                    updateChart(data.readings);
+                    updateTable(data.readings);
+                });
+        }
+
+        function updateStats(stats) {
+            document.getElementById('stats').innerHTML = `
+                <div class="stat-card">
+                    <div class="stat-value">${stats.current !== null ? stats.current.toFixed(1) : '—'}</div>
+                    <div class="stat-label">Current ${unit}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${stats.min !== null ? stats.min.toFixed(1) : '—'}</div>
+                    <div class="stat-label">Min ${unit}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${stats.max !== null ? stats.max.toFixed(1) : '—'}</div>
+                    <div class="stat-label">Max ${unit}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${stats.avg !== null ? stats.avg.toFixed(1) : '—'}</div>
+                    <div class="stat-label">Average ${unit}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${stats.count}</div>
+                    <div class="stat-label">Readings</div>
+                </div>
+            `;
+        }
+
+        function updateChart(readings) {
+            const ctx = document.getElementById('historyChart').getContext('2d');
+
+            const labels = readings.map(r => r.timestamp);
+            const values = readings.map(r => r.value);
+
+            if (chart) {
+                chart.destroy();
+            }
+
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: sensorName.replace(/_/g, ' ') + ' (' + unit + ')',
+                        data: values,
+                        borderColor: '#667eea',
+                        backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: readings.length > 100 ? 0 : 3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            display: true,
+                            title: { display: true, text: 'Time' }
+                        },
+                        y: {
+                            display: true,
+                            title: { display: true, text: unit }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+        }
+
+        function updateTable(readings) {
+            const tbody = document.getElementById('readings-body');
+            const recent = readings.slice(-100).reverse();
+            tbody.innerHTML = recent.map(r =>
+                `<tr><td>${r.timestamp}</td><td>${r.value !== null ? r.value : '—'} ${unit}</td></tr>`
+            ).join('');
+        }
+
+        // Load default (30 days)
+        loadData(720);
+    </script>
+</body>
+</html>
+"""
+
 
 @app.route("/")
 def dashboard():
     """Simple web dashboard to view the data."""
     return render_template_string(DASHBOARD_HTML)
+
+
+@app.route("/device/<sensor_name>")
+def device_page(sensor_name: str):
+    """Device history page for a specific sensor."""
+    # Validate sensor exists
+    sensor_config = next((s for s in SENSORS if s["field"] == sensor_name), None)
+    if not sensor_config:
+        return jsonify({"status": "error", "message": "Unknown sensor"}), 404
+
+    # Render template with sensor info
+    html = DEVICE_HTML.replace("{{ sensor_name }}", sensor_name)
+    html = html.replace("{{ sensor_display_name }}", sensor_config["name"])
+    html = html.replace("{{ unit }}", sensor_config["unit"])
+    return html
+
+
+@app.route("/api/device/<sensor_name>")
+@limiter.limit("100 per minute")
+def device_api(sensor_name: str):
+    """API endpoint for device history data."""
+    auth_error = check_api_key()
+    if auth_error:
+        return auth_error
+
+    # Validate sensor exists
+    sensor_config = next((s for s in SENSORS if s["field"] == sensor_name), None)
+    if not sensor_config:
+        return jsonify({"status": "error", "message": "Unknown sensor"}), 404
+
+    try:
+        hours = request.args.get("hours", 0, type=int)
+
+        with get_db() as conn:
+            cursor = conn.cursor()
+
+            # Build query with optional time filter
+            # sensor_name is validated against SENSORS whitelist above
+            if hours > 0:
+                query = f"""
+                    SELECT timestamp, "{sensor_name}" as value
+                    FROM readings
+                    WHERE "{sensor_name}" IS NOT NULL
+                    AND timestamp > datetime('now', '-{hours} hours')
+                    ORDER BY timestamp ASC
+                """  # nosec B608
+                cursor.execute(query)
+            else:
+                query = f"""
+                    SELECT timestamp, "{sensor_name}" as value
+                    FROM readings
+                    WHERE "{sensor_name}" IS NOT NULL
+                    ORDER BY timestamp ASC
+                """  # nosec B608
+                cursor.execute(query)
+
+            rows = cursor.fetchall()
+            readings = [{"timestamp": row[0], "value": row[1]} for row in rows]
+
+            # Calculate stats
+            values = [r["value"] for r in readings if r["value"] is not None]
+            stats = {
+                "current": values[-1] if values else None,
+                "min": min(values) if values else None,
+                "max": max(values) if values else None,
+                "avg": sum(values) / len(values) if values else None,
+                "count": len(values),
+            }
+
+        return jsonify({"sensor": sensor_name, "stats": stats, "readings": readings})
+
+    except sqlite3.Error as e:
+        logger.error(f"Database error in device_api: {e}")
+        return jsonify({"status": "error", "message": "Database error"}), 500
 
 
 @app.route("/health")
