@@ -154,23 +154,42 @@ def get_db() -> Generator[sqlite3.Connection, None, None]:
 
 
 def init_db() -> None:
-    """Initialize the database with the readings table."""
+    """Initialize the database with the readings table and migrate schema if needed."""
     try:
         with get_db() as conn:
             cursor = conn.cursor()
 
-            # Create main readings table with dynamic columns for each sensor
-            # Fields are validated on startup, so this is safe
-            columns = ", ".join([f'"{s["field"]}" REAL' for s in SENSORS])
+            # Check if table exists
             cursor.execute(
-                f"""
-                CREATE TABLE IF NOT EXISTS readings (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    {columns}
-                )
-            """
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='readings'"
             )
+            table_exists = cursor.fetchone() is not None
+
+            if not table_exists:
+                # Create new table with all sensor columns
+                columns = ", ".join([f'"{s["field"]}" REAL' for s in SENSORS])
+                cursor.execute(
+                    f"""
+                    CREATE TABLE readings (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        {columns}
+                    )
+                """
+                )
+                logger.info("Created new readings table")
+            else:
+                # Migrate: add any missing columns for new sensors
+                cursor.execute("PRAGMA table_info(readings)")
+                existing_columns = {row[1] for row in cursor.fetchall()}
+
+                for sensor in SENSORS:
+                    field = sensor["field"]
+                    if field not in existing_columns:
+                        cursor.execute(
+                            f'ALTER TABLE readings ADD COLUMN "{field}" REAL'
+                        )
+                        logger.info(f"Added new column: {field}")
 
             # Create an index on timestamp for faster queries
             cursor.execute(
