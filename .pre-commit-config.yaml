@@ -1,0 +1,86 @@
+# Pre-commit hooks for HomeKit Logger
+# Install: pip install pre-commit && pre-commit install
+# Run manually: pre-commit run --all-files
+
+repos:
+  # Code Formatting
+  - repo: https://github.com/psf/black
+    rev: 23.12.1
+    hooks:
+      - id: black
+        language_version: python3.11
+        args: [--line-length=88]
+
+  # Import Sorting
+  - repo: https://github.com/pycqa/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        args: [--profile=black]
+
+  # Linting
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.1.9
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+
+  # Security Scanning
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.6
+    hooks:
+      - id: bandit
+        args: [-r, .]
+        exclude: ^tests/
+
+  # File Checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-added-large-files
+        args: [--maxkb=1000]
+      - id: check-merge-conflict
+      - id: detect-private-key
+
+  # Custom Validation
+  - repo: local
+    hooks:
+      # Prevent Committing Secrets
+      - id: check-env-secrets
+        name: Check for Secrets in .env Files
+        entry: bash -c "if git diff --cached --name-only | grep -E '^\.env$'; then echo 'ERROR - Do not commit .env file'; exit 1; fi"
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
+      # Check Python syntax
+      - id: check-python-syntax
+        name: Check Python Syntax
+        entry: python3 -m py_compile
+        language: system
+        types: [python]
+        stages: [pre-commit]
+
+# Global Settings
+default_language_version:
+  python: python3.11
+
+# Exclude Patterns
+exclude: |
+  (?x)^(
+      \.git/|
+      \.venv/|
+      venv/|
+      __pycache__/|
+      \.pytest_cache/|
+      \.mypy_cache/|
+      \.ruff_cache/|
+      build/|
+      dist/|
+      .*\.egg-info/
+  )$

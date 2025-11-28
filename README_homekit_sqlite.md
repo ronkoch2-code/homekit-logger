@@ -81,7 +81,7 @@ Follow the original article's instructions for creating the HomeKit automation, 
 
 When you get to the "Get Contents of URL" step:
 
-1. **URL**: `http://<your-mac-ip>:5000/log`  
+1. **URL**: `http://<your-mac-ip>:5000/log`
    (e.g., `http://192.168.1.100:5000/log`)
 
 2. **Method**: POST
@@ -170,8 +170,8 @@ sqlite3 homekit_data.db
 # Example queries
 sqlite> SELECT * FROM readings ORDER BY timestamp DESC LIMIT 10;
 sqlite> SELECT AVG(outside_temp) FROM readings WHERE timestamp > datetime('now', '-1 day');
-sqlite> SELECT strftime('%Y-%m-%d %H:00', timestamp) as hour, AVG(co2_level) 
-        FROM readings 
+sqlite> SELECT strftime('%Y-%m-%d %H:00', timestamp) as hour, AVG(co2_level)
+        FROM readings
         GROUP BY hour;
 ```
 

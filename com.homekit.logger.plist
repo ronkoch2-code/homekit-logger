@@ -4,25 +4,25 @@
 <!--
   HomeKit Logger LaunchDaemon for macOS
   ======================================
-  
+
   This keeps the HomeKit logger running in the background and auto-starts on boot.
-  
+
   Installation:
   1. Edit the paths below to match your setup
   2. Copy to ~/Library/LaunchAgents/
   3. Load with: launchctl load ~/Library/LaunchAgents/com.homekit.logger.plist
   4. Start with: launchctl start com.homekit.logger
-  
+
   To stop: launchctl stop com.homekit.logger
   To unload: launchctl unload ~/Library/LaunchAgents/com.homekit.logger.plist
-  
+
   Check status: launchctl list | grep homekit
   View logs: tail -f /tmp/homekit_logger.log
 -->
 <dict>
     <key>Label</key>
     <string>com.homekit.logger</string>
-    
+
     <key>ProgramArguments</key>
     <array>
         <!-- Update this path to your Python installation -->
@@ -30,23 +30,23 @@
         <!-- Update this path to where you saved homekit_logger.py -->
         <string>/Users/YOUR_USERNAME/homekit_logger.py</string>
     </array>
-    
+
     <!-- Working directory - where the database will be created -->
     <key>WorkingDirectory</key>
     <string>/Users/YOUR_USERNAME</string>
-    
+
     <!-- Start automatically when loaded -->
     <key>RunAtLoad</key>
     <true/>
-    
+
     <!-- Restart if it crashes -->
     <key>KeepAlive</key>
     <true/>
-    
+
     <!-- Throttle restarts (wait 10 seconds between restart attempts) -->
     <key>ThrottleInterval</key>
     <integer>10</integer>
-    
+
     <!-- Log output -->
     <key>StandardOutPath</key>
     <string>/tmp/homekit_logger.log</string>
