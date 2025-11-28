@@ -39,13 +39,31 @@ from flask import Flask, Response, jsonify, render_template_string, request
 # Define your sensors here. The 'field' is what you'll use in the iOS Shortcut
 # as the form field name (like Google's entry.XXXXX but simpler)
 SENSORS = [
+    # Outside
     {"field": "outside_temp", "name": "Outside Temperature", "unit": "°C"},
     {"field": "outside_humidity", "name": "Outside Humidity", "unit": "%"},
-    {"field": "inside_temp", "name": "Inside Temperature", "unit": "°C"},
-    {"field": "inside_humidity", "name": "Inside Humidity", "unit": "%"},
+    # Master Bedroom
+    {
+        "field": "master_bedroom_temp",
+        "name": "Master Bedroom Temperature",
+        "unit": "°C",
+    },
+    {
+        "field": "master_bedroom_humidity",
+        "name": "Master Bedroom Humidity",
+        "unit": "%",
+    },
+    # Library
+    {"field": "library_temp", "name": "Library Temperature", "unit": "°C"},
+    {"field": "library_humidity", "name": "Library Humidity", "unit": "%"},
+    # Kitchen
+    {"field": "kitchen_temp", "name": "Kitchen Temperature", "unit": "°C"},
+    {"field": "kitchen_humidity", "name": "Kitchen Humidity", "unit": "%"},
+    # Living Room
+    {"field": "living_room_temp", "name": "Living Room Temperature", "unit": "°C"},
+    {"field": "living_room_humidity", "name": "Living Room Humidity", "unit": "%"},
+    # Other
     {"field": "co2_level", "name": "CO2 Level", "unit": "ppm"},
-    # Add more sensors as needed:
-    # {"field": "bedroom_temp", "name": "Bedroom Temperature", "unit": "°C"},
 ]
 
 # Configuration from environment variables with defaults
